@@ -64,6 +64,14 @@ func (h *Headers) Get(name string) string {
 }
 
 func (h *Headers) Set(name string, value string) {
+	name = strings.ToLower(name)
+
+	if v, ok := h.headers[name]; ok {
+		h.headers[name] = fmt.Sprintf("%s,%s", v, value)
+	} else {
+		h.headers[name] = value
+	}
+
 	h.headers[strings.ToLower(name)] = value
 }
 
