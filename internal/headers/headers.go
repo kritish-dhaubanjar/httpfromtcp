@@ -75,6 +75,12 @@ func (h *Headers) Set(name string, value string) {
 	h.headers[strings.ToLower(name)] = value
 }
 
+func (h *Headers) ForEach(cb func(n, v string)) {
+	for n, v := range h.headers {
+		cb(n, v)
+	}
+}
+
 func (h *Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false
