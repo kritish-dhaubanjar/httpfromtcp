@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -68,8 +69,14 @@ func runConnection(s *Server, conn io.ReadWriteCloser) {
 		}
 
 		for _, data := range image {
-			conn.Write([]byte(fmt.Sprintf("%x\r\n", len(data))))
-			conn.Write([]byte(data))
+			chunk, err := hex.DecodeString(data)
+
+			if err != nil {
+				return
+			}
+
+			fmt.Fprintf(conn, "%X\r\n", len(chunk))
+			conn.Write(chunk)
 			conn.Write([]byte("\r\n"))
 		}
 
