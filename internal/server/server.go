@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 
+	"httpfromtcp.kritishdhaubanjar.com.np/internal/headers"
 	"httpfromtcp.kritishdhaubanjar.com.np/internal/request"
 	"httpfromtcp.kritishdhaubanjar.com.np/internal/response"
 )
@@ -26,12 +27,12 @@ type Handler func(w io.Writer, req *request.Request) *HandlerError
 func runConnection(s *Server, conn io.ReadWriteCloser) {
 	defer conn.Close()
 
-	headers := response.GetDefaultHeaders(0)
+	responseHeaders := response.GetDefaultHeaders(0)
 	r, err := request.RequestFromReader(conn)
 
 	if err != nil {
 		response.WriteStatusLine(conn, response.StatusBadRequest)
-		response.WriteHeaders(conn, headers)
+		response.WriteHeaders(conn, responseHeaders)
 		return
 	}
 
@@ -50,11 +51,13 @@ func runConnection(s *Server, conn io.ReadWriteCloser) {
 
 	/**/
 	if r.RequestLine.RequestTarget == "/chunked-encoding" {
-		headers.Delete("Content-Length")
-		headers.Set("Transfer-Encoding", "chunked")
+		responseHeaders.Delete("Content-Length")
+		responseHeaders.Set("Transfer-Encoding", "chunked")
+		responseHeaders.Set("Trailer", "X-Content-SHA256")
+		responseHeaders.Set("Trailer", "X-Content-Length")
 
 		response.WriteStatusLine(conn, status)
-		response.WriteHeaders(conn, headers)
+		response.WriteHeaders(conn, responseHeaders)
 
 		var image = []string{
 			"89504E470D0A1A0A0000000D4948445200000028000000280803000000BB20485F",
@@ -80,17 +83,23 @@ func runConnection(s *Server, conn io.ReadWriteCloser) {
 			conn.Write([]byte("\r\n"))
 		}
 
-		conn.Write([]byte("0\r\n\r\n"))
+		conn.Write([]byte("0\r\n"))
+
+		trailers := headers.NewHeaders()
+		trailers.Set("X-Content-SHA256", "SHA256")
+		trailers.Set("X-Content-Length", "LENGTH")
+
+		response.WriteHeaders(conn, trailers)
 
 		return
 	}
 
 	/**/
 
-	headers.Replace("Content-length", fmt.Sprintf("%d", len(body)))
+	responseHeaders.Replace("Content-length", fmt.Sprintf("%d", len(body)))
 
 	response.WriteStatusLine(conn, status)
-	response.WriteHeaders(conn, headers)
+	response.WriteHeaders(conn, responseHeaders)
 	conn.Write(body)
 }
 
