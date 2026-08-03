@@ -1,24 +1,57 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
 
+	"httpfromtcp.kritishdhaubanjar.com.np/internal/request"
 	"httpfromtcp.kritishdhaubanjar.com.np/internal/response"
 )
 
 type Server struct {
-	closed bool
+	closed  bool
+	handler Handler
 }
+
+type HandlerError struct {
+	StatusCode response.StatusCode
+	Message    string
+}
+
+type Handler func(w io.Writer, req *request.Request) *HandlerError
 
 func runConnection(s *Server, conn io.ReadWriteCloser) {
 	defer conn.Close()
 
 	headers := response.GetDefaultHeaders(0)
+	r, err := request.RequestFromReader(conn)
 
-	response.WriteStatusLine(conn, response.StatusOK)
+	if err != nil {
+		response.WriteStatusLine(conn, response.StatusBadRequest)
+		response.WriteHeaders(conn, headers)
+		return
+	}
+
+	writer := bytes.NewBuffer([]byte{})
+	handlerError := s.handler(writer, r)
+
+	var body []byte = nil
+	var status response.StatusCode = response.StatusOK
+
+	if handlerError != nil {
+		status = handlerError.StatusCode
+		body = []byte(handlerError.Message)
+	} else {
+		body = writer.Bytes()
+	}
+
+	headers.Replace("Content-length", fmt.Sprintf("%d", len(body)))
+
+	response.WriteStatusLine(conn, status)
 	response.WriteHeaders(conn, headers)
+	conn.Write(body)
 }
 
 func runServer(s *Server, listener net.Listener) {
@@ -37,14 +70,14 @@ func runServer(s *Server, listener net.Listener) {
 	}
 }
 
-func Serve(port uint16) (*Server, error) {
+func Serve(port uint16, handler Handler) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	if err != nil {
 		return nil, err
 	}
 
-	server := &Server{closed: false}
+	server := &Server{closed: false, handler: handler}
 
 	go runServer(server, listener)
 
